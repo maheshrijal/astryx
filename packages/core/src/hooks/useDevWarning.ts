@@ -5,10 +5,9 @@
 /**
  * @file useDevWarning.ts
  * @input A component name, a message, and a boolean condition
- * @output Fires a dev-only `Component: message` warning once per mount
- * @position Core hook; the render-safe way to warn the builder from a component.
- *   A ref and an effect fire the warning once per mount, never during
- *   render, and without a re-render.
+ * @output Public once-per-mount warnings and an internal per-message variant
+ * @position Core hook; both paths share one render-safe diagnostic owner.
+ *   A ref and an effect fire warnings after commit, without a re-render.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts
@@ -39,11 +38,31 @@ export function useDevWarning(
   message: string,
   condition: boolean = true,
 ): void {
-  const hasWarnedRef = useRef(false);
+  useWarning(component, message, condition, false);
+}
+
+/** Internal: warn once for each distinct reason without changing the public hook. */
+export function useDevWarningPerMessage(
+  component: string,
+  message: string,
+  condition: boolean = true,
+): void {
+  useWarning(component, message, condition, true);
+}
+
+function useWarning(
+  component: string,
+  message: string,
+  condition: boolean,
+  isPerMessage: boolean,
+): void {
+  const warnedRef = useRef(new Set<string>());
   useEffect(() => {
-    if (condition && !hasWarnedRef.current) {
-      hasWarnedRef.current = true;
+    // Synchronize the development diagnostic sink after committed renders.
+    const key = isPerMessage ? message : '';
+    if (condition && !warnedRef.current.has(key)) {
+      warnedRef.current.add(key);
       devWarn(component, message);
     }
-  }, [component, message, condition]);
+  }, [component, message, condition, isPerMessage]);
 }

@@ -4025,6 +4025,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-virtualization",
+      "path": "hooks/use-table-virtualization",
+      "aliases": []
+    },
+    {
       "name": "hook-use-theme",
       "path": "hooks/use-theme",
       "aliases": []
