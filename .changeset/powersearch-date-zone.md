@@ -1,0 +1,7 @@
+---
+'@astryxdesign/core': patch
+---
+
+[fix] PowerSearch: a `date_absolute` value reads as one day in one zone — on the token, in the accessible label and announcements, and in the edit popover's date editor — and the editor writes the day picked. Before, the token showed the device's day, the label showed a date and a time in `timezoneID`, and the editor read and wrote the UTC day without receiving `timezoneID`, so west of UTC a filter opened on the day after the one its token showed and re-picking that day moved the value a day earlier. Now a date-only value (`isDateOnly` unset or true) is a calendar day in `timezoneID`, else the UTC day: the token shows that day; the accessible label and `formatFilterValue` show that day with no time of day (UTC midnight March 9 in Los Angeles read "Mar 8, 2024, 4:00 PM" and reads "Mar 9, 2024"); the editor opens on it; and a picked day stores as that zone's midnight — with `timezoneID` set this is a different instant from the UTC midnight stored before, so a caller that derived the day from the instant's UTC date reads it in `timezoneID` instead; with `timezoneID` unset no stored value changes. Each absolute `date_range` part is read and written as a calendar day the same way in the range editor. `isDateOnly: false` is an instant: a date-and-time editor and a time on the token and label, in `timezoneID`, else the viewer's zone; it had the date-only editor and stored midnight. A `components` Editor override and `PowerSearchFilterEditor` receive `timezoneID`.
+
+@imdreamrunner

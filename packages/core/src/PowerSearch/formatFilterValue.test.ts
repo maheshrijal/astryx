@@ -1,11 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {
-  formatDateAbsolute,
-  formatDateAbsoluteCompact,
-  formatFilterValue,
-} from './formatFilterValue';
+import {formatDateAbsolute, formatFilterValue} from './formatFilterValue';
 import type {TranslatorFn} from '../i18n';
 import type {OperatorValue, FilterValue} from './types';
 
@@ -277,8 +273,8 @@ describe('formatFilterValue', () => {
     it('keeps Gregorian years for locales that default to another calendar', () => {
       const unixSeconds = Date.parse('2026-08-22T12:00:00Z') / 1000;
       for (const value of [
-        formatDateAbsolute(unixSeconds, 'th-TH', 'UTC'),
-        formatDateAbsoluteCompact(unixSeconds, 'th-TH'),
+        formatDateAbsolute(unixSeconds, 'th-TH', 'UTC', false),
+        formatDateAbsolute(unixSeconds, 'th-TH', 'UTC', true),
       ]) {
         expect(value).toContain('2026');
         expect(value).not.toContain('2569');

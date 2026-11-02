@@ -16,6 +16,7 @@ import type {Locale, TranslatorFn} from '../i18n';
 import {truncateCharacters} from '../utils/characters';
 import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/PowerSearch/formatFilterValue.generated';
+import {resolveDateZone} from './powerSearchDateZone';
 
 registerEnglishFallback(english);
 
@@ -36,40 +37,28 @@ function formatNumber(value: number, locale: Locale, units?: string): string {
   return units ? `${formatted} ${units}` : formatted;
 }
 
+/**
+ * The one reading of a `date_absolute` value: a date-only value is its
+ * calendar day in the zone `resolveDateZone` names, a date-and-time value is
+ * its wall-clock time there. The token text and the accessible label share
+ * it; the editors read the same zone through `resolveDateZone`, so a value
+ * never reads as two days in one field.
+ */
 export function formatDateAbsolute(
   unixSeconds: number,
   locale: Locale,
-  timezoneID?: string,
+  timezoneID: string | undefined,
+  isDateOnly: boolean,
 ): string {
   const options: Intl.DateTimeFormatOptions = {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    ...(timezoneID ? {timeZone: timezoneID} : {}),
+    ...(isDateOnly ? {} : {hour: 'numeric', minute: '2-digit'}),
+    timeZone: resolveDateZone(timezoneID, isDateOnly),
     calendar: 'gregory',
   };
   return new Intl.DateTimeFormat(locale, options).format(unixSeconds * 1000);
-}
-
-/**
- * Compact date-only rendering (no time-of-day) for the token pill's inline
- * value display, which has less room than the editor's full summary. Kept
- * separate from {@link formatDateAbsolute} rather than reusing it with
- * different options threaded through a param, since the two callers want
- * genuinely different shapes, not a parameterization of the same one.
- */
-export function formatDateAbsoluteCompact(
-  unixSeconds: number,
-  locale: Locale,
-): string {
-  return new Intl.DateTimeFormat(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    calendar: 'gregory',
-  }).format(unixSeconds * 1000);
 }
 
 function formatRelativeDate(value: string): string {
@@ -188,7 +177,13 @@ export function formatFilterValue(
 
     case 'date_absolute':
       return truncate(
-        formatDateAbsolute(filterValue.unixSeconds, locale, timezoneID),
+        formatDateAbsolute(
+          filterValue.unixSeconds,
+          locale,
+          timezoneID,
+          operatorValue.type !== 'date_absolute' ||
+            operatorValue.isDateOnly !== false,
+        ),
         maxLength,
       );
 
