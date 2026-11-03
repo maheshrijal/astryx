@@ -31,6 +31,7 @@ import {
   type TokenizerOverflowBehavior,
 } from '../Tokenizer';
 import {TokenizerClearAllMessageContext} from '../Tokenizer/TokenizerClearAllMessageContext';
+import {TokenizerItemRemovableContext} from '../Tokenizer/TokenizerItemRemovableContext';
 import {TypeaheadItem} from '../Typeahead/TypeaheadItem';
 import {Token} from '../Token';
 import {Avatar} from '../Avatar';
@@ -61,6 +62,7 @@ import {themeProps} from '../utils/themeProps';
 import {truncateCharacters} from '../utils/characters';
 import {useLocale} from '../i18n/useLocale';
 import type {Locale} from '../i18n/types';
+import type {SearchableItem} from '../Typeahead/types';
 import type {
   PowerSearchConfig,
   PowerSearchFilter,
@@ -738,17 +740,33 @@ export function PowerSearch({
             value: undefined,
           },
         });
-      } else if (change.type === 'remove' && change.item) {
-        const auxData = change.item.auxiliaryData as PowerSearchAuxData;
-        if (auxData?.filterIndex != null) {
-          const newFilters = filters.filter((_, i) =>
-            _items.some(item => item.auxiliaryData?.filterIndex === i),
+      } else if (change.type === 'remove') {
+        const keptIndices = new Set(
+          _items.map(item => item.auxiliaryData?.filterIndex),
+        );
+        const firstRemovedIndex = filters.findIndex(
+          (_, i) => !keptIndices.has(i),
+        );
+        if (firstRemovedIndex >= 0) {
+          onChange(
+            filters.filter((_, i) => keptIndices.has(i)),
+            'remove',
+            firstRemovedIndex,
           );
-          onChange(newFilters, 'remove', auxData.filterIndex);
         }
       }
     },
     [config, filters, onChange, setPopoverState],
+  );
+
+  // A read-only filter has no remove control. Clear all keeps it, and
+  // Backspace does not remove it.
+  const isItemRemovable = useCallback(
+    (item: SearchableItem) => {
+      const filterIndex = (item as PowerSearchItem).auxiliaryData?.filterIndex;
+      return filterIndex == null || !filters[filterIndex]?.isReadOnly;
+    },
+    [filters],
   );
 
   // Handle clicking a token to edit
@@ -1071,10 +1089,16 @@ export function PowerSearch({
   // unprompted) announces nothing until the count changes.
   const announce = useAnnounce();
   // PowerSearch words its Clear all as its record does; the field announces
-  // these words instead of Tokenizer's (component:Tokenizer AR7).
+  // these words instead of Tokenizer's (component:Tokenizer AR7). Clear all
+  // keeps read-only filters, so with one present the words name only the
+  // editable filters.
+  const hasReadOnlyFilter = filters.some(filter => filter.isReadOnly);
   const clearAllMessage = useMemo(
-    () => t('@astryx.powersearch.allFiltersRemoved'),
-    [t],
+    () =>
+      hasReadOnlyFilter
+        ? t('@astryx.powersearch.editableFiltersRemoved')
+        : t('@astryx.powersearch.allFiltersRemoved'),
+    [hasReadOnlyFilter, t],
   );
   const announcedResultCountRef = useRef(resultCountText);
   useEffect(() => {
@@ -1117,37 +1141,39 @@ export function PowerSearch({
         {/* The field's Clear all announces PowerSearch's own words
             (component:PowerSearch; component:Tokenizer AR7). */}
         <TokenizerClearAllMessageContext value={clearAllMessage}>
-          <Tokenizer
-            handleRef={tokenizerRef}
-            label={label}
-            isLabelHidden={isLabelHidden}
-            searchSource={searchSource}
-            value={tokenizerValue}
-            onChange={handleTokenizerChange}
-            renderToken={renderToken}
-            renderItem={renderItem}
-            maxMenuItems={MAX_BROWSE_MENU_ITEMS}
-            menuWidth={menuWidth}
-            placeholder={filters.length === 0 ? placeholder : ''}
-            hasAutoFocus={hasAutoFocus}
-            hasClear={hasClear && !isReadOnly}
-            startIcon={startIcon}
-            endContent={combinedEndContent}
-            isDisabled={isDisabled}
-            disabledMessage={disabledMessage}
-            size={size}
-            tokenOverflowBehavior={tokenOverflowBehavior}
-            hasEntriesOnFocus
-            debounceMs={0}
-            status={status}
-            statusVariant={statusVariant}
-            onFocus={onFocus}
-            onBlur={onBlur}
-            containerXstyle={xstyle}
-            containerClassName={className}
-            containerStyle={style}
-            data-testid={testId}
-          />
+          <TokenizerItemRemovableContext value={isItemRemovable}>
+            <Tokenizer
+              handleRef={tokenizerRef}
+              label={label}
+              isLabelHidden={isLabelHidden}
+              searchSource={searchSource}
+              value={tokenizerValue}
+              onChange={handleTokenizerChange}
+              renderToken={renderToken}
+              renderItem={renderItem}
+              maxMenuItems={MAX_BROWSE_MENU_ITEMS}
+              menuWidth={menuWidth}
+              placeholder={filters.length === 0 ? placeholder : ''}
+              hasAutoFocus={hasAutoFocus}
+              hasClear={hasClear && !isReadOnly}
+              startIcon={startIcon}
+              endContent={combinedEndContent}
+              isDisabled={isDisabled}
+              disabledMessage={disabledMessage}
+              size={size}
+              tokenOverflowBehavior={tokenOverflowBehavior}
+              hasEntriesOnFocus
+              debounceMs={0}
+              status={status}
+              statusVariant={statusVariant}
+              onFocus={onFocus}
+              onBlur={onBlur}
+              containerXstyle={xstyle}
+              containerClassName={className}
+              containerStyle={style}
+              data-testid={testId}
+            />
+          </TokenizerItemRemovableContext>
         </TokenizerClearAllMessageContext>
       </div>
       {popover.render(popoverContent, {

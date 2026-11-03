@@ -55,6 +55,7 @@ import {
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {TokenizerClearAllMessageContext} from './TokenizerClearAllMessageContext';
+import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useAdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {useIsHydrating} from '../hooks/useIsHydrating';
@@ -1007,11 +1008,18 @@ export function Tokenizer<T extends SearchableItem>({
   // `endContent`, a clear button, or all three — so its width is measured
   // rather than assumed, and the input reserves it.
   const [laneRef, laneReserve] = useEndLaneReserve(END_LANE_INSET);
+  // A composing component can lock tokens (PowerSearch's read-only filters).
+  // No remove path removes a locked token.
+  const isItemRemovable = use(TokenizerItemRemovableContext);
+  const canRemoveItem = useCallback(
+    (item: T) => isItemRemovable?.(item) ?? true,
+    [isItemRemovable],
+  );
   // The half of the lane's contents this component knows about. The busy half
   // is the leaf's own business — folding it in here would mean reading the
   // busy state during this render, which is exactly the re-render the store
   // exists to avoid.
-  const hasClearButton = hasClear && value.length > 0 && !isDisabled;
+  const hasClearButton = hasClear && !isDisabled && value.some(canRemoveItem);
   const hasStaticEndLane = Boolean(endContent || hasClearButton);
   const [isFocusedWithin, setIsFocusedWithin] = useState(false);
   const isTruncated =
@@ -1263,7 +1271,7 @@ export function Tokenizer<T extends SearchableItem>({
   // announcement covers both.
   const handleRemove = useCallback(
     (item: T, options?: {silent?: boolean}): boolean => {
-      if (isDisabled) {
+      if (isDisabled || !canRemoveItem(item)) {
         return false;
       }
       const newItems = value.filter(v => v.id !== item.id);
@@ -1274,22 +1282,25 @@ export function Tokenizer<T extends SearchableItem>({
       inputRef.current?.focus();
       return true;
     },
-    [value, onChange, isDisabled, announce, t],
+    [value, onChange, isDisabled, canRemoveItem, announce, t],
   );
 
-  // Handle clearing all items
   // A composing component that words its own Clear all (PowerSearch) provides
   // its words; otherwise the field's own (component:Tokenizer AR7).
   const clearAllMessage =
     use(TokenizerClearAllMessageContext) ?? t('@astryx.tokenizer.allRemoved');
   const handleClearAll = useCallback(
     (options?: {silent?: boolean}) => {
-      if (isDisabled || value.length === 0) {
+      const removedItems = value.filter(canRemoveItem);
+      if (isDisabled || removedItems.length === 0) {
         return;
       }
-      // Report the last item as removed (convention)
-      const lastItem = value[value.length - 1];
-      onChange([], {item: lastItem, type: 'remove'});
+      // onChange names one item. Clear all names the last one it removes.
+      const lastRemovedItem = removedItems[removedItems.length - 1];
+      onChange(
+        value.filter(item => !canRemoveItem(item)),
+        {item: lastRemovedItem, type: 'remove'},
+      );
       // Focus moves to the input, so the emptied selection is announced, in
       // the sheet's words (WCAG 4.1.3). The sheet announces its own Clear all.
       if (!options?.silent) {
@@ -1297,7 +1308,7 @@ export function Tokenizer<T extends SearchableItem>({
       }
       inputRef.current?.focus();
     },
-    [value, onChange, isDisabled, announce, clearAllMessage],
+    [value, onChange, isDisabled, canRemoveItem, announce, clearAllMessage],
   );
 
   // Handle backspace on empty input — remove last token
@@ -1360,7 +1371,7 @@ export function Tokenizer<T extends SearchableItem>({
         key={item.id}
         label={item.label}
         size={size}
-        onRemove={isDisabled ? undefined : onRemoveItem}
+        onRemove={isDisabled || !canRemoveItem(item) ? undefined : onRemoveItem}
         isDisabled={isDisabled}
         xstyle={styles.token}
       />
